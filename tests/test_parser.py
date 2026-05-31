@@ -1,5 +1,3 @@
-import pytest
-
 from igps_ble.parser import decode_device_string, parse_battery_level
 
 
