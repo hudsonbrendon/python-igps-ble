@@ -11,8 +11,10 @@ from bleak import BleakClient
 from .const import (
     BATTERY_LEVEL_UUID,
     FIRMWARE_REVISION_UUID,
+    HARDWARE_REVISION_UUID,
     MANUFACTURER_NAME_UUID,
     MODEL_NUMBER_UUID,
+    SOFTWARE_REVISION_UUID,
 )
 from .models import IGPSDeviceState
 from .parser import decode_device_string, parse_battery_level
@@ -33,7 +35,12 @@ class IGPSClient:
         async with BleakClient(self._address) as client:
             battery = await self._read(client, BATTERY_LEVEL_UUID)
             model = await self._read(client, MODEL_NUMBER_UUID)
-            firmware = await self._read(client, FIRMWARE_REVISION_UUID)
+            # O iGS10S expõe o firmware na Software Revision (0x2A28); outros
+            # aparelhos usam a Firmware Revision (0x2A26). Tentamos as duas.
+            firmware = await self._read(client, SOFTWARE_REVISION_UUID)
+            if firmware is None:
+                firmware = await self._read(client, FIRMWARE_REVISION_UUID)
+            hardware = await self._read(client, HARDWARE_REVISION_UUID)
             manufacturer = await self._read(client, MANUFACTURER_NAME_UUID)
 
         return IGPSDeviceState(
@@ -43,6 +50,7 @@ class IGPSClient:
             battery_level=parse_battery_level(battery) if battery is not None else None,
             model=decode_device_string(model) if model is not None else None,
             firmware=decode_device_string(firmware) if firmware is not None else None,
+            hardware=decode_device_string(hardware) if hardware is not None else None,
             manufacturer=(
                 decode_device_string(manufacturer)
                 if manufacturer is not None

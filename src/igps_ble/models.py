@@ -19,4 +19,5 @@ class IGPSDeviceState:
     battery_level: int | None = None
     model: str | None = None
     firmware: str | None = None
+    hardware: str | None = None
     manufacturer: str | None = None
