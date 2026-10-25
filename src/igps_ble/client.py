@@ -136,7 +136,7 @@ class IGPSSession:
         payload: bytes,
         sub: int = 0xFF,
         channel: str = p.DATA_RX,
-        timeout: float = 5.0,
+        timeout: float = 10.0,
     ) -> dict[int, list]:
         """Envia e devolve a resposta decodificada (``{}`` para um ACK de SET)."""
         async with self._lock:
@@ -221,7 +221,7 @@ async def _read_protocol(s: IGPSSession) -> dict:
         }
 
     async def activities():
-        msg = await s.simple(p.Service.CYCLING_DATA, 1, channel=p.THIRD_RX)
+        msg = await s.simple(p.Service.CYCLING_DATA, 1, channel=p.THIRD_RX, timeout=20)
         items = (p.decode(raw) for raw in msg.get(3, []))
         out["activities"] = tuple(
             sorted(
@@ -402,7 +402,7 @@ async def command(
     fields=(),
     sub: int = 0xFF,
     channel: str = p.DATA_RX,
-    timeout: float = 5.0,
+    timeout: float = 10.0,
 ) -> dict[int, list]:
     """Comando cru: ``{1: service, 2: op, *fields}`` — para o que não tem helper."""
     return await session.simple(

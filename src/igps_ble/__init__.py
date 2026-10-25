@@ -3,7 +3,7 @@
 from .client import IGPSClient, IGPSCommandError, IGPSSession, read_state, set_profile
 from .models import Activity, IGPSDeviceState, UserProfile
 
-__version__ = "0.3.2"
+__version__ = "0.3.3"
 
 __all__ = [
     "Activity",

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "python-igps-ble"
-version = "0.3.2"
+version = "0.3.3"
 description = "Pure-Python BLE library for the iGPSPORT iGS10S cycling computer (battery, sensors, ride status, activities, profile)"
 readme = "README.md"
 license = { text = "MIT" }
