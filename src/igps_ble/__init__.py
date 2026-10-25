@@ -1,7 +1,18 @@
 """Pure-Python BLE library for the iGPSPORT iGS10S cycling computer."""
 
-from .models import IGPSDeviceState
+from .client import IGPSClient, IGPSCommandError, IGPSSession, read_state, set_profile
+from .models import Activity, IGPSDeviceState, UserProfile
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
-__all__ = ["IGPSDeviceState", "__version__"]
+__all__ = [
+    "Activity",
+    "IGPSClient",
+    "IGPSCommandError",
+    "IGPSDeviceState",
+    "IGPSSession",
+    "UserProfile",
+    "__version__",
+    "read_state",
+    "set_profile",
+]
