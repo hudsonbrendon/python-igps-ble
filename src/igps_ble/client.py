@@ -7,7 +7,6 @@ conectado — o HA passa o do bleak-retry-connector; a CLI usa ``IGPSClient``.
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import logging
 import struct
 from dataclasses import replace
@@ -69,6 +68,10 @@ class IGPSSession:
         self._buffer = bytearray()
         self._frames: asyncio.Queue[tuple[p.Header, bytes]] = asyncio.Queue()
         self._lock = asyncio.Lock()
+
+    @property
+    def client(self) -> BleakClient:
+        return self._client
 
     async def start(self) -> None:
         for char in (p.DATA_TX, p.THIRD_TX):
@@ -175,8 +178,10 @@ async def _read_protocol(s: IGPSSession) -> dict:
     out: dict = {}
 
     async def attempt(fn):
-        with contextlib.suppress(IGPSCommandError, TimeoutError, ValueError):
+        try:
             await fn()
+        except (IGPSCommandError, TimeoutError, ValueError) as err:
+            _LOGGER.debug("consulta %s falhou: %r", fn.__name__, err)
 
     async def battery():
         msg = p.decode(_first(await s.simple(p.Service.FACTORY, 6), 6, b""))
