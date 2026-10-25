@@ -26,7 +26,5 @@ async def discover_devices(timeout: float = 10.0) -> list[IGPSDeviceState]:
         name = adv.local_name or device.name
         if not is_igps_device(name):
             continue
-        results.append(
-            IGPSDeviceState(address=address, name=name, rssi=adv.rssi)
-        )
+        results.append(IGPSDeviceState(address=address, name=name, rssi=adv.rssi))
     return results

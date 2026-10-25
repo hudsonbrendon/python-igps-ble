@@ -23,6 +23,7 @@ class UserProfile:
 class Activity:
     """Uma atividade gravada no aparelho (lista do serviço CYCLING_DATA)."""
 
+    id: int  # timestamp FIT cru — identifica a atividade nos comandos
     start: datetime  # horário local do aparelho (naive)
     size: int  # bytes do .fit
 

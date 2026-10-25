@@ -34,6 +34,12 @@ but works standalone in any async Python project (or straight from the command l
 - 🚴 **Ride status** — idle / recording / paused, live ride fields while recording,
   last GPS position.
 - 🗂️ **Activities** — list of rides stored on the device (start time, size).
+- 💾 **`.fit` download** — `download_activity(session, id, size)` with per-chunk CRC and
+  size checks.
+- 🧹 **Maintenance** — delete one/all activities, `factory_control()` (format,
+  factory reset, settings reset, lock, logs, test mode), unbind, DFU mode.
+- 🛰️ **GPS** — `gps_control()`, `set_gnss()`, `set_gps_dynamic()`, `set_gps_position()`.
+- 🧪 **Raw** — `command(session, service, op, fields)` for anything else.
 - ⚙️ **Profile** — write rider weight/height/age/sex, wheel circumference, bike
   weight and time zone (`set_profile`).
 - 🖥️ **CLI** — `igps-ble scan / info` for quick testing.
@@ -106,7 +112,9 @@ shared scanner or a Bluetooth proxy) or a string MAC/UUID address.
 | Ride status, last GPS fix, live ride fields | ✅ | DEV_STATUS service (live field units unconfirmed) |
 | Stored activity list | ✅ | CYCLING_DATA service |
 | Rider/bike profile, time zone | ✅ write-only | USER_CONFIG service |
-| `.fit` download, display/page settings, time sync | ❌ | not implemented / unsupported by the iGS10S firmware |
+| `.fit` download | ✅ | CYCLING_DATA FILE_GET |
+| Delete activities, format, factory reset, GPS/factory settings, unbind, DFU | ✅ not live-tested | FACTORY / CYCLING_DATA / BLE / FIRMWARE |
+| Display/page settings, time sync | ❌ | unsupported by the iGS10S firmware |
 
 ## Development
 

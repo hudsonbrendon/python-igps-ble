@@ -24,6 +24,7 @@ Only a tiny wire codec is needed, so we ship one instead of protoc output.
 
 from __future__ import annotations
 
+import struct
 from dataclasses import dataclass
 
 # NUS instances. Base 6e40000X-b5a3-f393-e0a9-e50e24dccaYe.
@@ -44,8 +45,10 @@ FRAME_ACK = 0x02
 class Service:
     """``Common.service_type_index`` (subset relevant to a bike computer)."""
 
+    FIRMWARE = 4
     CYCLING_DATA = 6
     USER_CONFIG = 9
+    BLE = 10
     FACTORY = 11
     CONFIG = 12
     DEV_STATUS = 13
@@ -75,6 +78,12 @@ def build_header(service: int, op: int, payload: bytes, sub: int = 0xFF) -> byte
     return head + bytes([crc8(head)])
 
 
+def build_ack(service: int, op: int, status: int = 0, sub: int = 0xFF) -> bytes:
+    """``ConfirmCommand``: confirma (0) ou pede reenvio (1) de um pedaço."""
+    head = bytes([FRAME_ACK, service, sub, 0xFF, op, 0xFF, 0xFF, status]) + b"\xff" * 11
+    return head + bytes([crc8(head)])
+
+
 @dataclass(frozen=True)
 class Header:
     kind: int
@@ -84,6 +93,11 @@ class Header:
     length: int
     payload_crc: int
     raw: bytes
+
+    @property
+    def last(self) -> bool:
+        """Último pedaço de uma transferência de arquivo (end type 3)."""
+        return self.raw[10] == 3
 
     @property
     def status(self) -> int:
@@ -124,10 +138,13 @@ def _varint(value: int) -> bytes:
 
 
 def encode(fields: list[tuple[int, int | bytes | str | list]]) -> bytes:
-    """Encode ``[(field_no, value)]``. int → varint, bytes/str → len-delimited,
-    list → nested message (same shape)."""
+    """Encode ``[(field_no, value)]``. int → varint, float → double,
+    bytes/str → len-delimited, list → nested message (same shape)."""
     out = bytearray()
     for number, value in fields:
+        if isinstance(value, float):  # double (wire type 1)
+            out += _varint(number << 3 | 1) + struct.pack("<d", value)
+            continue
         if isinstance(value, bool | int):
             out += _varint(number << 3) + _varint(int(value))
             continue
