@@ -7,10 +7,13 @@ conectado — o HA passa o do bleak-retry-connector; a CLI usa ``IGPSClient``.
 from __future__ import annotations
 
 import asyncio
-import logging
-import struct
+from collections.abc import Awaitable, Callable, Iterable
+import contextlib
 from dataclasses import replace
 from datetime import datetime, timedelta
+import logging
+import struct
+from typing import Any
 
 from bleak import BleakClient
 
@@ -49,14 +52,15 @@ class IGPSCommandError(Exception):
 
 
 def fit_time(seconds: int) -> datetime:
+    """Converte segundos desde o epoch FIT em ``datetime`` local (naive)."""
     return FIT_EPOCH + timedelta(seconds=seconds)
 
 
 def _double(raw: int) -> float:
-    return struct.unpack("<d", raw.to_bytes(8, "little"))[0]
+    return float(struct.unpack("<d", raw.to_bytes(8, "little"))[0])
 
 
-def _first(msg: dict, key: int, default=None):
+def _first(msg: dict[int, list[Any]], key: int, default: Any = None) -> Any:
     return msg.get(key, [default])[0]
 
 
@@ -71,17 +75,19 @@ class IGPSSession:
 
     @property
     def client(self) -> BleakClient:
+        """``BleakClient`` conectado usado pela sessão."""
         return self._client
 
     async def start(self) -> None:
+        """Assina as notificações dos canais NUS (dados, controle e ch3)."""
         for char in (p.DATA_TX, p.THIRD_TX):
             await self._client.start_notify(char, self._on_data)
         await self._client.start_notify(p.CONTROL_TX, self._on_control)
 
-    def _on_data(self, _char, data: bytearray) -> None:
+    def _on_data(self, _char: object, data: bytearray) -> None:
         self._buffer += data
 
-    def _on_control(self, _char, data: bytearray) -> None:
+    def _on_control(self, _char: object, data: bytearray) -> None:
         header = p.parse_header(bytes(data))
         if header is None:
             return
@@ -108,7 +114,7 @@ class IGPSSession:
             chunk = payload[i : i + p.PACKET_SIZE]
             await self._client.write_gatt_char(channel, chunk, response=True)
         await self._client.write_gatt_char(
-            p.CONTROL_RX, p.build_header(service, op, payload, sub), True
+            p.CONTROL_RX, p.build_header(service, op, payload, sub), response=True
         )
 
     async def receive(
@@ -128,8 +134,9 @@ class IGPSSession:
                 return header, payload
 
     async def ack(self, service: int, op: int, status: int = 0) -> None:
+        """Envia um ``ConfirmCommand`` (0 = ok, 1 = reenvia) no canal de controle."""
         await self._client.write_gatt_char(
-            p.CONTROL_RX, p.build_ack(service, op, status), True
+            p.CONTROL_RX, p.build_ack(service, op, status), response=True
         )
 
     async def request(
@@ -140,13 +147,19 @@ class IGPSSession:
         sub: int = 0xFF,
         channel: str = p.DATA_RX,
         timeout: float = 10.0,
-    ) -> dict[int, list]:
+    ) -> dict[int, list[Any]]:
         """Envia e devolve a resposta decodificada (``{}`` para um ACK de SET)."""
         async with self._lock:
             await self.send(service, op, payload, sub, channel)
             return p.decode((await self.receive(service, timeout))[1])
 
-    async def simple(self, service: int, op: int, extra=(), **kw) -> dict[int, list]:
+    async def simple(
+        self,
+        service: int,
+        op: int,
+        extra: Iterable[tuple[int, Any]] = (),
+        **kw: Any,
+    ) -> dict[int, list[Any]]:
         """Mensagem padrão ``{1: service, 2: op, ...}``."""
         payload, _ = p.request(service, op, extra)
         return await self.request(service, op, payload, **kw)
@@ -173,35 +186,35 @@ async def _sig_battery(client: BleakClient) -> int | None:
         return None
 
 
-async def _read_protocol(s: IGPSSession) -> dict:
+async def _read_protocol(s: IGPSSession) -> dict[str, Any]:
     """Cada consulta é independente: falha numa não derruba as outras."""
-    out: dict = {}
+    out: dict[str, Any] = {}
 
-    async def attempt(fn):
+    async def attempt(fn: Callable[[], Awaitable[None]]) -> None:
         try:
             await fn()
         except (IGPSCommandError, TimeoutError, ValueError) as err:
             _LOGGER.debug("consulta %s falhou: %r", fn.__name__, err)
 
-    async def battery():
+    async def battery() -> None:
         msg = p.decode(_first(await s.simple(p.Service.FACTORY, 6), 6, b""))
         out["battery_voltage"] = _first(msg, 1, 0) / 1000 or None
         out["battery_level"] = _first(msg, 2)
 
-    async def serial():
+    async def serial() -> None:
         sn = p.decode(_first(await s.simple(p.Service.FACTORY, 1), 3, b""))
         out["serial"] = _first(sn, 1, b"").decode() or None
 
-    async def version():
+    async def version() -> None:
         ver = p.decode(_first(await s.simple(p.Service.DEV_VER_INFO, 2), 3, b""))
         if (proto := _first(ver, 6)) is not None:
             out["protocol_version"] = f"{proto // 100}.{proto % 100:02d}"
 
-    async def memory():
+    async def memory() -> None:
         mem = p.decode(_first(await s.simple(p.Service.FACTORY, 5), 5, b""))
         out["memory_total"], out["memory_free"] = _first(mem, 1), _first(mem, 2)
 
-    async def sensors():
+    async def sensors() -> None:
         for raw in (await s.simple(p.Service.FACTORY, 4)).get(4, []):
             sensor = p.decode(raw)
             kind, data = _first(sensor, 1), _first(sensor, 2, 0)
@@ -210,7 +223,7 @@ async def _read_protocol(s: IGPSSession) -> dict:
             elif kind == 4:  # TEM, décimos de °C
                 out["temperature"] = p.int32(data) / 10
 
-    async def status():
+    async def status() -> None:
         msg = await s.simple(p.Service.DEV_STATUS, 1)
         cyc = p.decode(_first(msg, 3, b""))
         out["cycling_status"] = CYCLING_STATUS.get(_first(cyc, 1, 0))
@@ -225,7 +238,7 @@ async def _read_protocol(s: IGPSSession) -> dict:
             RIDE_FIELDS[k]: p.int32(v[0]) for k, v in rt.items() if k in RIDE_FIELDS
         }
 
-    async def activities():
+    async def activities() -> None:
         msg = await s.simple(p.Service.CYCLING_DATA, 1, channel=p.THIRD_RX, timeout=20)
         items = (p.decode(raw) for raw in msg.get(3, []))
         out["activities"] = tuple(
@@ -331,7 +344,7 @@ async def _download_once(
     svc, file_get, file_send = p.Service.CYCLING_DATA, 3, 4
     payload, _ = p.request(svc, file_get, [(3, [(1, activity_id)])])
     content = bytearray()
-    async with session._lock:
+    async with session._lock:  # noqa: SLF001
         await session.send(svc, file_get, payload, channel=p.THIRD_RX)
         retries = 0
         while True:
@@ -404,11 +417,11 @@ async def command(
     session: IGPSSession,
     service: int,
     op: int,
-    fields=(),
+    fields: Iterable[tuple[int, Any]] = (),
     sub: int = 0xFF,
     channel: str = p.DATA_RX,
     timeout: float = 10.0,
-) -> dict[int, list]:
+) -> dict[int, list[Any]]:
     """Comando cru: ``{1: service, 2: op, *fields}`` — para o que não tem helper."""
     return await session.simple(
         service, op, list(fields), sub=sub, channel=channel, timeout=timeout
@@ -427,12 +440,14 @@ async def delete_all_activities(session: IGPSSession) -> None:
     await session.simple(p.Service.CYCLING_DATA, 6, channel=p.THIRD_RX)
 
 
-async def _factory(session: IGPSSession, op: int, field: int, data, **kw) -> None:
+async def _factory(
+    session: IGPSSession, op: int, field: int, data: Any, **kw: Any
+) -> None:
     await session.simple(p.Service.FACTORY, op, [(field, data)], **kw)
 
 
 async def factory_control(session: IGPSSession, cmd: str, status: int = 1) -> None:
-    """FACTORY/CONTROL_SET: format, factory_reset, reset_settings, lock, logs…
+    """FACTORY/CONTROL_SET: format, factory_reset, reset_settings, lock, logs.
 
     Os que reiniciam o aparelho podem não responder: timeout conta como enviado.
     """
@@ -448,7 +463,7 @@ async def gps_control(session: IGPSSession, cmd: str, status: int = 1) -> None:
     await _factory(session, 16, 14, [(1, GPS_COMMAND[cmd]), (2, status)])
 
 
-async def set_gnss(session: IGPSSession, systems) -> None:
+async def set_gnss(session: IGPSSession, systems: Iterable[str]) -> None:
     """Constelações ativas, ex. ``{"gps", "glonass", "galileo"}``."""
     mask = 0
     for name in systems:
@@ -457,6 +472,7 @@ async def set_gnss(session: IGPSSession, systems) -> None:
 
 
 async def set_gps_dynamic(session: IGPSSession, mode: str) -> None:
+    """FACTORY/GPS_DYNAMIC_SET: modelo dinâmico do receptor (``GPS_DYNAMIC``)."""
     await _factory(session, 20, 16, [(1, GPS_DYNAMIC[mode])])
 
 
@@ -478,6 +494,7 @@ async def set_sun_time(session: IGPSSession, sunrise: int, sunset: int) -> None:
 
 
 async def set_filter(session: IGPSSession, name: str, enabled: bool) -> None:
+    """FACTORY/FILTER_SET: liga/desliga um filtro de ``FILTERS``."""
     await _factory(session, 14, 13, [(1, FILTERS[name]), (2, int(enabled))])
 
 
@@ -507,10 +524,8 @@ async def enter_dfu(session: IGPSSession) -> None:
     Lá ele espera um .zip de firmware (ex.: nRF Connect / nrfutil). Costuma
     reiniciar sem responder, então timeout conta como enviado.
     """
-    try:
+    with contextlib.suppress(TimeoutError):
         await session.simple(p.Service.FIRMWARE, 5, timeout=5)
-    except TimeoutError:
-        pass
 
 
 class IGPSClient:
@@ -524,5 +539,6 @@ class IGPSClient:
         self._rssi = rssi
 
     async def async_read_state(self) -> IGPSDeviceState:
+        """Conecta, lê o estado completo e desconecta."""
         async with BleakClient(self._address) as client:
             return await read_state(client, self._address, self._name, self._rssi)

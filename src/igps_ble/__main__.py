@@ -25,6 +25,7 @@ async def _info(address: str) -> None:
 
 
 def main() -> None:
+    """Entrada da CLI ``igps-ble``."""
     parser = argparse.ArgumentParser(prog="igps-ble")
     sub = parser.add_subparsers(dest="cmd", required=True)
     p_scan = sub.add_parser("scan", help="Procura aparelhos iGPSPORT por perto")

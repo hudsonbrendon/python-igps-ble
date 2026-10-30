@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 
-def parse_battery_level(data: bytes) -> int | None:
+def parse_battery_level(data: bytes | bytearray) -> int | None:
     """Battery Level (0x2A19): 1 byte uint8, 0..100. None se ausente/inválido."""
     if not data:
         return None
@@ -13,7 +13,7 @@ def parse_battery_level(data: bytes) -> int | None:
     return value
 
 
-def decode_device_string(data: bytes) -> str | None:
+def decode_device_string(data: bytes | bytearray) -> str | None:
     """Device Information string UTF-8; remove NUL de padding e espaços."""
     if not data:
         return None
