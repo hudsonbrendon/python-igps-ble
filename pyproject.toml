@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,31 +7,132 @@ name = "python-igps-ble"
 version = "0.3.4"
 description = "Pure-Python BLE library for the iGPSPORT iGS10S cycling computer (battery, sensors, ride status, activities, profile)"
 readme = "README.md"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.11"
 authors = [{ name = "Hudson Brendon", email = "contato.hudsonbrendon@gmail.com" }]
+keywords = [
+  "igpsport",
+  "igs10s",
+  "cycling",
+  "ble",
+  "bluetooth",
+  "bleak",
+  "home-assistant",
+  "async",
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Framework :: AsyncIO",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+  "Typing :: Typed",
+]
 dependencies = ["bleak>=0.22"]
 
 [project.urls]
 Homepage = "https://github.com/hudsonbrendon/python-igps-ble"
+Repository = "https://github.com/hudsonbrendon/python-igps-ble"
 Issues = "https://github.com/hudsonbrendon/python-igps-ble/issues"
-
-[project.optional-dependencies]
-dev = ["pytest>=8", "pytest-asyncio>=0.23", "ruff>=0.5"]
+Changelog = "https://github.com/hudsonbrendon/python-igps-ble/blob/main/CHANGELOG.md"
 
 [project.scripts]
 igps-ble = "igps_ble.__main__:main"
 
+[dependency-groups]
+dev = [
+  "mypy>=1.14",
+  "pytest>=8.3",
+  "pytest-asyncio>=0.25",
+  "pytest-cov>=6",
+  "pytest-timeout>=2.3",
+  "ruff>=0.9",
+]
+
+[tool.uv]
+default-groups = ["dev"]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 
-[tool.pytest.ini_options]
-asyncio_mode = "auto"
-pythonpath = ["src"]
+[tool.setuptools.package-data]
+igps_ble = ["py.typed"]
 
 [tool.ruff]
 target-version = "py311"
 line-length = 88
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B"]
+select = ["ALL"]
+ignore = [
+  "ANN401",  # Any in **kwargs
+  "COM812",  # formatter conflict
+  "CPY001",  # no copyright headers
+  "D203",    # docstring style conflicts (keep D211)
+  "D213",    # docstring style conflicts (keep D212)
+  "D417",    # false positives on Args sections
+  "ISC001",  # formatter conflict
+  "PLR2004", # magic values are fine in protocol code
+  "TRY003",  # long exception messages
+  "EM101",   # string literal in exception
+  "EM102",   # f-string in exception
+  "FBT001",  # boolean positional args in setters are intentional
+  "FBT002",
+  "PLR0913", # protocol setters have many parameters
+  "C901",    # parsing functions are branchy by nature
+  "PLR0912",
+  "PLR0915",
+  "PLR0911", # state machines have many returns
+  "ERA001",  # section banners look like commented code
+  "TRY300",  # try/else style is a matter of taste
+  "TC001",   # runtime imports are fine with `from __future__ import annotations`
+  "TC002",
+  "TC003",
+  "D107",    # __init__ documented on the class
+  "DTZ",     # device clock/FIT epoch are naive local time by design
+  "ASYNC109", # `timeout` parameters are part of the public API
+  "PLR0917", # protocol helpers take many positional arguments
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.isort]
+force-sort-within-sections = true
+combine-as-imports = true
+known-first-party = ["igps_ble"]
+
+[tool.ruff.lint.flake8-pytest-style]
+fixture-parentheses = false
+mark-parentheses = false
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*" = ["ANN", "D", "E501", "PLR", "S", "SLF", "ARG", "INP", "FBT", "PT", "PLC0415", "ERA", "RUF012", "N806", "T201", "ASYNC", "EM", "TRY", "BLE", "C901", "PGH", "RUF", "PLW"]
+"src/igps_ble/__main__.py" = ["T201", "ASYNC240"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unreachable = true
+show_error_codes = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-q --cov=igps_ble --cov-report=term-missing"
+timeout = 30
+
+[tool.coverage.run]
+source = ["igps_ble"]
+branch = true
+omit = ["src/igps_ble/__main__.py"]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 77

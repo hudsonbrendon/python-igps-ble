@@ -24,8 +24,10 @@ Only a tiny wire codec is needed, so we ship one instead of protoc output.
 
 from __future__ import annotations
 
-import struct
+from collections.abc import Iterable
 from dataclasses import dataclass
+import struct
+from typing import Any
 
 # NUS instances. Base 6e40000X-b5a3-f393-e0a9-e50e24dccaYe.
 DATA_RX = "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
@@ -60,6 +62,7 @@ class Service:
 
 
 def crc8(data: bytes) -> int:
+    """CRC-8/MAXIM (poly refletido 0x31, init 0)."""
     crc = 0
     for byte in data:
         crc ^= byte
@@ -69,6 +72,7 @@ def crc8(data: bytes) -> int:
 
 
 def build_header(service: int, op: int, payload: bytes, sub: int = 0xFF) -> bytes:
+    """Header de 20 bytes que acompanha ``payload`` no canal de controle."""
     head = (
         bytes([FRAME_HEADER, service, sub, 0xFF, op, 0xFF, 0xFF])
         + len(payload).to_bytes(2, "big")
@@ -86,6 +90,8 @@ def build_ack(service: int, op: int, status: int = 0, sub: int = 0xFF) -> bytes:
 
 @dataclass(frozen=True)
 class Header:
+    """Header (0x01) ou ACK (0x02) recebido no canal de controle."""
+
     kind: int
     service: int
     sub: int
@@ -106,6 +112,7 @@ class Header:
 
 
 def parse_header(frame: bytes) -> Header | None:
+    """Valida tamanho/CRC e devolve o ``Header``; ``None`` se não for um frame."""
     if len(frame) != 20 or frame[0] not in (FRAME_HEADER, FRAME_ACK):
         return None
     if crc8(frame[:19]) != frame[19]:
@@ -137,9 +144,12 @@ def _varint(value: int) -> bytes:
             return bytes(out)
 
 
-def encode(fields: list[tuple[int, int | bytes | str | list]]) -> bytes:
-    """Encode ``[(field_no, value)]``. int → varint, float → double,
-    bytes/str → len-delimited, list → nested message (same shape)."""
+def encode(fields: Iterable[tuple[int, Any]]) -> bytes:
+    """Encode ``[(field_no, value)]``.
+
+    int -> varint, float -> double, bytes/str -> len-delimited,
+    list -> nested message (same shape).
+    """
     out = bytearray()
     for number, value in fields:
         if isinstance(value, float):  # double (wire type 1)
@@ -149,21 +159,24 @@ def encode(fields: list[tuple[int, int | bytes | str | list]]) -> bytes:
             out += _varint(number << 3) + _varint(int(value))
             continue
         if isinstance(value, list):
-            value = encode(value)
+            raw = encode(value)
         elif isinstance(value, str):
-            value = value.encode()
-        out += _varint(number << 3 | 2) + _varint(len(value)) + value
+            raw = value.encode()
+        else:
+            raw = value
+        out += _varint(number << 3 | 2) + _varint(len(raw)) + raw
     return bytes(out)
 
 
-def decode(data: bytes) -> dict[int, list]:
+def decode(data: bytes) -> dict[int, list[Any]]:
     """Decode one message level into ``{field_no: [raw values]}``.
 
     Varints come back as unsigned ints, len-delimited as bytes, fixed as int.
     Callers decide whether bytes are a nested message (``decode`` again).
     """
-    out: dict[int, list] = {}
+    out: dict[int, list[Any]] = {}
     i = 0
+    value: int | bytes
     while i < len(data):
         key, i = _read_varint(data, i)
         number, wire = key >> 3, key & 7
@@ -204,7 +217,9 @@ def int32(value: int) -> int:
     return value
 
 
-def request(service: int, op: int, extra=(), sub: int = 0xFF) -> tuple[bytes, bytes]:
+def request(
+    service: int, op: int, extra: Iterable[tuple[int, Any]] = (), sub: int = 0xFF
+) -> tuple[bytes, bytes]:
     """Return ``(payload, header)`` for a ``{1: service, 2: op, ...}`` request."""
     payload = encode([(1, service), (2, op), *extra])
     return payload, build_header(service, op, payload, sub)
